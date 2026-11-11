@@ -1,0 +1,72 @@
+"use client";
+
+export interface UserInfo {
+  username: string;
+  fullName: string;
+  role: string;
+  district: string;
+}
+
+export const TOKEN_KEY = "cems_token";
+export const USER_KEY = "cems_user";
+
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path.replace("http://localhost:8080", API_BASE_URL);
+  }
+  return `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function getUser(): UserInfo | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuth(token: string, user: UserInfo): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+export function clearAuth(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+  
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(apiUrl(url), {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    // Token expired or invalid
+    clearAuth();
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+  }
+
+  return res;
+}
